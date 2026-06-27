@@ -572,6 +572,58 @@ function saveData() {
   } catch(e) {}
 }
 
+function saveDraft() {
+  try {
+    const draft = {
+      timeIn:  document.getElementById('timeIn').value,
+      timeOut: document.getElementById('timeOut').value,
+      isDouhan: document.getElementById('togDouhan').checked,
+      isVip:    document.getElementById('togVip').checked,
+      isVipSolo: document.getElementById('togVipSolo').checked,
+      isNaijo:  document.getElementById('togNaijo').checked,
+      naijoCount: document.getElementById('naijoCount').value,
+      budget:   document.getElementById('budgetDisp').value,
+      memo:     document.getElementById('memoInput').value,
+      orders:   [1,2,3,4,5].map(i => document.getElementById('o'+i).value),
+    };
+    localStorage.setItem('cast_draft', JSON.stringify(draft));
+  } catch(e) {}
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem('cast_draft');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.timeIn)  document.getElementById('timeIn').value  = d.timeIn;
+    if (d.timeOut) document.getElementById('timeOut').value = d.timeOut;
+    document.getElementById('togDouhan').checked  = d.isDouhan  || false;
+    document.getElementById('togVip').checked     = d.isVip     || false;
+    document.getElementById('togVipSolo').checked = d.isVipSolo || false;
+    document.getElementById('togNaijo').checked   = d.isNaijo   || false;
+    document.getElementById('naijoCount').value   = d.naijoCount || 1;
+    document.getElementById('vipSoloRow').style.display = d.isVip ? 'block' : 'none';
+    document.getElementById('naijoCountRow').style.display = d.isNaijo ? 'block' : 'none';
+    if (d.budget) {
+      document.getElementById('budgetDisp').value = d.budget;
+      document.getElementById('budget').value = rawNum(d.budget);
+    }
+    if (d.memo) document.getElementById('memoInput').value = d.memo;
+    if (d.orders) {
+      d.orders.forEach((v, i) => {
+        const n = rawNum(v);
+        document.getElementById('o'+(i+1)).value = n > 0 ? n.toLocaleString('ja-JP') : '';
+        document.getElementById('ov'+(i+1)).value = n || 0;
+      });
+    }
+    calc();
+  } catch(e) {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem('cast_draft'); } catch(e) {}
+}
+
 // ===== 時間入力 自動フォーマット =====
   function onTimeInput(el) {
     let v = el.value.replace(/[^0-9]/g, ''); // 数字のみ
@@ -792,7 +844,7 @@ function calc() {
   const rounded  = roundPayment(total);
 
   // 担当小計（全項目に対して比率）
-  const tanto = total;
+  const tanto = subtotal;
 
   // 表示
   document.getElementById('dispSet').textContent = fmt(setCost + extCost);
@@ -821,6 +873,7 @@ function calc() {
     }
   }
   setRemain(remain, rounded, budget, addable, orderSum, subtotal);
+  saveDraft();
 }
 
 function resetResultDisplay() {
@@ -899,7 +952,7 @@ function confirmBilling() {
   const subtotal   = setCost+extCost+shimenCost+naijoCost+douhanCost+vipCost+orderSum;
   const total      = applyTax(subtotal);
   const rounded    = roundPayment(total);
-  const tanto      = total;
+  const tanto      = subtotal;
 
   let addable = 0;
   if (budget && rounded<=budget) {
@@ -918,6 +971,7 @@ function confirmBilling() {
   history.push(entry);
   saveData();
   renderHistory();
+  clearDraft();
   resetAll();
 }
 
@@ -944,6 +998,7 @@ function resetAll() {
   document.getElementById('budgetDisp').value='';
   document.getElementById('memoInput').value='';
   document.getElementById('naijoCountRow').style.display='none';
+  clearDraft();
   for(let i=1;i<=5;i++){
     document.getElementById('o'+i).value='';
     document.getElementById('ov'+i).value='';
@@ -1043,7 +1098,7 @@ function editCalc(id) {
   entry.subtotal = subtotal;
   entry.total = applyTax(subtotal);
   entry.rounded = roundPayment(entry.total);
-  entry.tanto = entry.total;
+  entry.tanto = entry.subtotal;
 
   document.getElementById('eresult-'+id).innerHTML = editResultHTML(entry);
 
