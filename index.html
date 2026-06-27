@@ -369,7 +369,7 @@
         <div class="toggle-label">同伴</div>
         <div class="toggle-sub">最低90分（60分＋30分延長）</div>
       </div>
-      <label class="toggle"><input type="checkbox" id="togDouhan" onchange="calc()"><span class="toggle-slider"></span></label>
+      <label class="toggle"><input type="checkbox" id="togDouhan" onchange="calc();saveDraft()"><span class="toggle-slider"></span></label>
     </div>
     <div class="toggle-row">
       <div>
@@ -384,7 +384,7 @@
           <div class="toggle-label" style="font-size:0.78rem;">1人利用</div>
           <div class="toggle-sub">YESで2人分チャージ（×2）</div>
         </div>
-        <label class="toggle"><input type="checkbox" id="togVipSolo" onchange="calc()"><span class="toggle-slider"></span></label>
+        <label class="toggle"><input type="checkbox" id="togVipSolo" onchange="calc();saveDraft()"><span class="toggle-slider"></span></label>
       </div>
     </div>
     <div class="toggle-row">
@@ -392,12 +392,12 @@
         <div class="toggle-label">場内指名</div>
         <div class="toggle-sub">人数を入力してください</div>
       </div>
-      <label class="toggle"><input type="checkbox" id="togNaijo" onchange="calc()"><span class="toggle-slider"></span></label>
+      <label class="toggle"><input type="checkbox" id="togNaijo" onchange="calc();saveDraft()"><span class="toggle-slider"></span></label>
     </div>
     <div id="naijoCountRow" style="display:none;margin-top:10px;">
       <div class="input-row">
         <label class="input-label">人数</label>
-        <input type="number" id="naijoCount" value="1" min="1" oninput="calc()">
+        <input type="number" id="naijoCount" value="1" min="1" oninput="calc();saveDraft()">
         <span style="font-size:0.72rem;color:var(--muted);">人</span>
       </div>
     </div>
@@ -428,7 +428,7 @@
   <!-- メモ -->
   <div class="card">
     <div class="card-title">メモ</div>
-    <input type="text" id="memoInput" class="memo-input" placeholder="卓番・特記事項など" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:0.9rem;font-family:inherit;padding:10px 12px;outline:none;">
+    <input type="text" id="memoInput" class="memo-input" placeholder="卓番・特記事項など" oninput="saveDraft()" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:0.9rem;font-family:inherit;padding:10px 12px;outline:none;">
   </div>
 
   <!-- 合計 -->
@@ -656,6 +656,7 @@ function clearDraft() {
     document.getElementById('vipSoloRow').style.display = isVip ? 'block' : 'none';
     if (!isVip) document.getElementById('togVipSolo').checked = false;
     calc();
+    saveDraft();
   }
 
 // ===== フォーマット =====
