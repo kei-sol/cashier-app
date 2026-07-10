@@ -684,6 +684,8 @@ function clearDraft() {
   function addNaijoGroup() {
     naijoGroups.push({ count:1, startTime:'' });
     renderNaijoGroups();
+    calc();
+    saveDraft();
   }
 
   function removeNaijoGroup(i) {
@@ -1054,7 +1056,7 @@ function confirmBilling() {
   const entry = {
     id: Date.now(),
     inTime, outTime, stayMin,
-    isDouhan, isVip, isNaijo, naijoCount,
+    isDouhan, isVip, isNaijo, naijoGroups: JSON.parse(JSON.stringify(naijoGroups)),
     orders, orderSum, subtotal, total, rounded, tanto, budget, addable, memo,
     label: getTimeslotLabel(inTime),
   };
