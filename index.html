@@ -352,13 +352,15 @@
     <div class="card-title">入退店時間</div>
     <div class="input-row">
       <label class="input-label">入店</label>
-      <div class="input-with-clear"><input type="text" id="timeIn" placeholder="例: 2000" inputmode="numeric" oninput="onTimeInput(this)" maxlength="5" style="flex:1;"><button class="clear-btn" onclick="clearInput('timeIn')">✕</button></div>
+      <div class="input-with-clear"><input type="text" id="timeIn" placeholder="例: 2000" inputmode="numeric" oninput="onTimeInput(this)" maxlength="5" style="flex:1;"><button class="clear-btn" onclick="clearTimeIn()">✕</button></div>
     </div>
-    <div class="input-row">
-      <label class="input-label">退店</label>
-      <div class="input-with-clear"><input type="text" id="timeOut" placeholder="例: 2130" inputmode="numeric" oninput="onTimeInput(this)" maxlength="5" style="flex:1;"><button class="clear-btn" onclick="clearInput('timeOut')">✕</button></div>
+    <div style="margin-top:10px;" id="extBlockList"></div>
+    <div style="display:none;gap:8px;margin-top:8px;" id="extAddBtns">
+      <button onclick="addExtBlock(30)" style="flex:1;background:rgba(212,84,138,0.08);border:1px dashed var(--border);border-radius:8px;color:var(--accent);padding:8px;font-size:0.75rem;font-family:inherit;cursor:pointer;">＋30分延長</button>
+      <button onclick="addExtBlock(60)" style="flex:1;background:rgba(212,84,138,0.08);border:1px dashed var(--border);border-radius:8px;color:var(--accent);padding:8px;font-size:0.75rem;font-family:inherit;cursor:pointer;">＋1時間延長</button>
     </div>
     <div style="margin-top:8px;font-size:0.68rem;color:var(--muted);text-align:center;" id="stayDisplay">—</div>
+    <input type="hidden" id="timeOut">
   </div>
 
   <!-- オプション -->
@@ -369,7 +371,7 @@
         <div class="toggle-label">同伴</div>
         <div class="toggle-sub">最低90分（60分＋30分延長）</div>
       </div>
-      <label class="toggle"><input type="checkbox" id="togDouhan" onchange="calc();saveDraft()"><span class="toggle-slider"></span></label>
+      <label class="toggle"><input type="checkbox" id="togDouhan" onchange="renderExtBlocks();calc();saveDraft()"><span class="toggle-slider"></span></label>
     </div>
     <div class="toggle-row">
       <div>
@@ -572,7 +574,7 @@ function saveDraft() {
   try {
     const draft = {
       timeIn:  document.getElementById('timeIn').value,
-      timeOut: document.getElementById('timeOut').value,
+      extBlocks: extBlocks,
       isDouhan: document.getElementById('togDouhan').checked,
       isVip:    document.getElementById('togVip').checked,
       isVipSolo: document.getElementById('togVipSolo').checked,
@@ -592,7 +594,7 @@ function loadDraft() {
     if (!raw) return;
     const d = JSON.parse(raw);
     if (d.timeIn)  document.getElementById('timeIn').value  = d.timeIn;
-    if (d.timeOut) document.getElementById('timeOut').value = d.timeOut;
+    if (d.extBlocks) { extBlocks = d.extBlocks; renderExtBlocks(); }
     document.getElementById('togDouhan').checked  = d.isDouhan  || false;
     document.getElementById('togVip').checked     = d.isVip     || false;
     document.getElementById('togVipSolo').checked = d.isVipSolo || false;
@@ -627,7 +629,103 @@ function clearDraft() {
       v = v.slice(0,2) + ':' + v.slice(2,4);
     }
     el.value = v;
+    renderExtBlocks();
     calc();
+    saveDraft();
+  }
+
+// ===== 延長ブロック管理 =====
+  let extBlocks = []; // [{min: 30 or 60}]
+
+  function calcCurrentTime(afterBlocks) {
+    const inTime = document.getElementById('timeIn').value;
+    if (!inTime || !inTime.includes(':')) return null;
+    const [ih, im] = inTime.split(':').map(Number);
+    let total = ih*60 + im;
+    for (let i=0;i<afterBlocks;i++) total += extBlocks[i].min;
+    return total;
+  }
+
+  function addExtBlock(min) {
+    extBlocks.push({ min });
+    renderExtBlocks();
+    calc();
+    saveDraft();
+  }
+
+  function removeExtBlock(i) {
+    extBlocks.splice(i);  // i以降を全部削除（後のブロックも無効になるため）
+    renderExtBlocks();
+    calc();
+    saveDraft();
+  }
+
+  function clearTimeIn() {
+    document.getElementById('timeIn').value = '';
+    extBlocks = [];
+    renderExtBlocks();
+    calc();
+    saveDraft();
+  }
+
+  function renderExtBlocks() {
+    const inTime = document.getElementById('timeIn').value;
+    const isDouhan = document.getElementById('togDouhan').checked;
+    const list = document.getElementById('extBlockList');
+    const addBtns = document.getElementById('extAddBtns');
+    if (!list) return;
+
+    if (!inTime || !inTime.includes(':')) {
+      list.innerHTML = '';
+      if (addBtns) addBtns.style.display = 'none';
+      document.getElementById('timeOut').value = '';
+      return;
+    }
+
+    const [ih, im] = inTime.split(':').map(Number);
+    let cursor = ih*60+im;
+
+    let html = '';
+
+    if (isDouhan) {
+      // 同伴：入店時点で90分固定（セット料金×1.5）
+      const inH = Math.floor(cursor/60)%24, inM = cursor%60;
+      cursor += 90;
+      const endH = Math.floor(cursor/60)%24, endM = cursor%60;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:0.68rem;color:var(--accent);min-width:60px;">${String(inH).padStart(2,'0')}:${String(inM).padStart(2,'0')}〜${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}</div>
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text);flex:1;">同伴（90分）</div>
+      </div>`;
+    } else {
+      // 通常：入店時点で1時間（セット）を自動表示
+      const inH = Math.floor(cursor/60)%24, inM = cursor%60;
+      cursor += 60;
+      const endH = Math.floor(cursor/60)%24, endM = cursor%60;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:0.68rem;color:var(--accent);min-width:60px;">${String(inH).padStart(2,'0')}:${String(inM).padStart(2,'0')}〜${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}</div>
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text);flex:1;">セット（1時間）</div>
+      </div>`;
+    }
+
+    extBlocks.forEach((b, i) => {
+      const fromH = Math.floor(cursor/60)%24, fromM = cursor%60;
+      cursor += b.min;
+      const toH = Math.floor(cursor/60)%24, toM = cursor%60;
+      const label = b.min === 30 ? '30分延長' : '1時間延長';
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:0.68rem;color:var(--muted);min-width:60px;">${String(fromH).padStart(2,'0')}:${String(fromM).padStart(2,'0')}〜${String(toH).padStart(2,'0')}:${String(toM).padStart(2,'0')}</div>
+        <div style="font-size:0.72rem;color:var(--text);flex:1;">${label}</div>
+        <button onclick="removeExtBlock(${i})" style="background:transparent;border:none;color:var(--danger);font-size:0.9rem;cursor:pointer;padding:0 4px;">✕</button>
+      </div>`;
+    });
+
+    list.innerHTML = html;
+
+    // 退店時間をhiddenに設定
+    const outH = Math.floor(cursor/60)%24, outM = cursor%60;
+    document.getElementById('timeOut').value = String(outH).padStart(2,'0')+':'+String(outM).padStart(2,'0');
+
+    if (addBtns) addBtns.style.display = 'flex';
   }
 
 // ===== クリアボタン =====
@@ -791,47 +889,39 @@ function getSetPrice(inTime) {
 }
 
 function calcTimeBasedFees(stayMin, inTime) {
-  // 入店時刻（分）
+  if (!inTime || !inTime.includes(':')) return { setCost:0, extCost:0, shimenCost:0 };
   const [ih, im] = inTime.split(':').map(Number);
-  const inMinTotal = ih * 60 + im;
+  let cursor = ih*60+im;
 
-  let setCost = 0;   // セット料金合計
-  let extCost = 0;   // 延長料金合計（時間帯ごとのセット料金を適用）
-  let remaining = stayMin;
-  let cursor = inMinTotal; // 現在の時刻（分）
-  let isFirst = true;
-
-  while (remaining > 0) {
-    const block = Math.min(remaining, 30); // 30分単位で処理
-    const hhmm = Math.floor(cursor / 60) % 24;
-    const mm = cursor % 60;
-    const timeStr = String(hhmm).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
-    const slotPrice = getSetPrice(timeStr); // この時間帯のセット料金（1時間）
-
-    if (isFirst && block === 60) {
-      // 最初の1時間：セット料金
-      setCost += slotPrice;
-      isFirst = false;
-      cursor += 60; remaining -= 60;
-    } else if (isFirst && block === 30 && remaining <= 30) {
-      // 最初の30分だけの場合（同伴なしで30分未満は通常ない想定だが念のため）
-      setCost += slotPrice * 0.5;
-      isFirst = false;
-      cursor += 30; remaining -= 30;
-    } else {
-      // 延長ブロック（30分単位）
-      if (block >= 60 || remaining >= 60) {
-        // 1時間延長
-        extCost += slotPrice;
-        cursor += 60; remaining -= 60;
-      } else {
-        // 30分延長（半額）
-        extCost += slotPrice * 0.5;
-        cursor += 30; remaining -= 30;
-      }
-      isFirst = false;
-    }
+  function priceAt(minTotal) {
+    const hhmm = Math.floor(minTotal/60)%24;
+    const mm = minTotal%60;
+    return getSetPrice(String(hhmm).padStart(2,'0')+':'+String(mm).padStart(2,'0'));
   }
+
+  let setCost = 0, extCost = 0;
+
+  const isDouhan = document.getElementById('togDouhan').checked;
+
+  if (isDouhan) {
+    // 同伴：入店時間帯のセット料金×1.5（90分分）
+    setCost = priceAt(cursor) * 1.5;
+    cursor += 90;
+  } else {
+    // 通常：最初の1時間セット料金
+    setCost = priceAt(cursor);
+    cursor += 60;
+  }
+
+  // 延長ブロック：「延長を決めた時刻」の時間帯が次の延長に引き継がれる
+  // 最初の延長は入店時の時間帯、以降は直前の延長開始時刻の時間帯
+  let decisionTimeMin = isDouhan ? (ih*60+im) : (ih*60+im); // 入店時刻
+  extBlocks.forEach(b => {
+    const price = priceAt(decisionTimeMin);
+    extCost += b.min === 60 ? price : price * 0.5;
+    decisionTimeMin = cursor; // 次の延長の基準は今回の延長開始時刻
+    cursor += b.min;
+  });
 
   // 指名料：滞在時間を1時間単位で切り上げ
   const shimenHours = Math.ceil(stayMin / 60);
@@ -1003,7 +1093,6 @@ function confirmBilling() {
   const memo     = document.getElementById('memoInput').value.trim();
 
   let stayMin = calcStayMinutes(inTime, outTime);
-  if (isDouhan && stayMin < 90) stayMin = 90;
 
   let orderSum = 0;
   const orders = [];
