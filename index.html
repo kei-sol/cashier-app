@@ -369,7 +369,7 @@
     <div class="toggle-row">
       <div>
         <div class="toggle-label">同伴</div>
-        <div class="toggle-sub">最低90分（60分＋30分延長）</div>
+        <div class="toggle-sub">同伴（90分）</div>
       </div>
       <label class="toggle"><input type="checkbox" id="togDouhan" onchange="renderExtBlocks();calc();saveDraft()"><span class="toggle-slider"></span></label>
     </div>
@@ -399,6 +399,20 @@
     <div id="naijoCountRow" style="display:none;margin-top:10px;">
       <div id="naijoGroups" style="display:flex;flex-direction:column;gap:8px;"></div>
       <button onclick="addNaijoGroup()" style="width:100%;margin-top:8px;background:rgba(212,84,138,0.08);border:1px dashed var(--border);border-radius:10px;color:var(--accent);padding:8px;font-size:0.75rem;font-family:inherit;cursor:pointer;">＋ 場内指名を追加</button>
+    </div>
+    <div class="toggle-row" style="margin-top:8px;">
+      <div>
+        <div class="toggle-label">割引券</div>
+        <div class="toggle-sub">税抜小計から差し引き</div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="togDiscount" onchange="onDiscountToggle()"><span class="toggle-slider"></span></label>
+    </div>
+    <div id="discountRow" style="display:none;margin-top:8px;">
+      <div class="input-row">
+        <label class="input-label">割引額 ¥</label>
+        <input type="text" id="discountDisp" placeholder="例: 3,000" inputmode="numeric" oninput="onDiscount(this)">
+        <input type="hidden" id="discount">
+      </div>
     </div>
   </div>
 
@@ -439,6 +453,7 @@
     <div class="result-row" id="dispShimenRow"><span class="result-label">指名料</span><span class="result-val" id="dispShimen">—</span></div>
     <div class="result-row" id="dispNaijoRow" style="display:none;"><span class="result-label">場内指名</span><span class="result-val" id="dispNaijo">—</span></div>
     <div class="result-row"><span class="result-label">注文小計</span><span class="result-val" id="dispOrder">¥0</span></div>
+  <div class="result-row" id="dispDiscountRow" style="display:none;"><span class="result-label" style="color:var(--success);">割引券</span><span class="result-val" id="dispDiscount" style="color:var(--success);">-¥0</span></div>
     <div class="result-row"><span class="result-label">税・サービス料</span><span class="result-val" id="dispTax">—</span></div>
     <hr class="result-divider">
     <div class="result-row"><span class="result-label">合計金額</span><span class="result-val accent" id="dispTotal">—</span></div>
@@ -582,6 +597,8 @@ function saveDraft() {
       naijoGroups: naijoGroups,
       budget:   document.getElementById('budgetDisp').value,
       memo:     document.getElementById('memoInput').value,
+      discount: document.getElementById('discountDisp').value,
+      togDiscount: document.getElementById('togDiscount').checked,
       orders:   [1,2,3,4,5].map(i => document.getElementById('o'+i).value),
     };
     localStorage.setItem('cast_draft', JSON.stringify(draft));
@@ -607,6 +624,8 @@ function loadDraft() {
       document.getElementById('budget').value = rawNum(d.budget);
     }
     if (d.memo) document.getElementById('memoInput').value = d.memo;
+    if (d.togDiscount) { document.getElementById('togDiscount').checked=true; document.getElementById('discountRow').style.display='block'; }
+    if (d.discount) { document.getElementById('discountDisp').value=d.discount; document.getElementById('discount').value=rawNum(d.discount); }
     if (d.orders) {
       d.orders.forEach((v, i) => {
         const n = rawNum(v);
@@ -725,7 +744,12 @@ function clearDraft() {
     const outH = Math.floor(cursor/60)%24, outM = cursor%60;
     document.getElementById('timeOut').value = String(outH).padStart(2,'0')+':'+String(outM).padStart(2,'0');
 
-    if (addBtns) addBtns.style.display = 'flex';
+    if (addBtns) {
+      addBtns.style.display = 'flex';
+      // 同伴時は延長が1回もない場合だけ30分ボタンを非表示
+      const btn30 = addBtns.querySelector('button:first-child');
+      if (btn30) btn30.style.display = (isDouhan && extBlocks.length === 0) ? 'none' : 'flex';
+    }
   }
 
 // ===== クリアボタン =====
@@ -794,6 +818,25 @@ function clearDraft() {
   }
 
 // ===== VIPトグル =====
+  function onDiscountToggle() {
+    const on = document.getElementById('togDiscount').checked;
+    document.getElementById('discountRow').style.display = on ? 'block' : 'none';
+    if (!on) {
+      document.getElementById('discountDisp').value = '';
+      document.getElementById('discount').value = '';
+    }
+    calc();
+    saveDraft();
+  }
+
+  function onDiscount(el) {
+    const n = rawNum(el.value);
+    el.value = n > 0 ? n.toLocaleString('ja-JP') : (el.value.replace(/,/g,'')||'');
+    document.getElementById('discount').value = n || 0;
+    calc();
+    saveDraft();
+  }
+
   function onNaijoToggle() {
     const isNaijo = document.getElementById('togNaijo').checked;
     document.getElementById('naijoCountRow').style.display = isNaijo ? 'block' : 'none';
@@ -902,29 +945,44 @@ function calcTimeBasedFees(stayMin, inTime) {
   let setCost = 0, extCost = 0;
 
   const isDouhan = document.getElementById('togDouhan').checked;
+  const inPriceMin = ih*60+im; // 入店時刻（分）
 
   if (isDouhan) {
-    // 同伴：入店時間帯のセット料金×1.5（90分分）
-    setCost = priceAt(cursor) * 1.5;
+    // 同伴：60分分＋30分分（同じ入店時間帯）
+    const basePrice = priceAt(inPriceMin);
+    setCost = basePrice + basePrice * 0.5;
     cursor += 90;
+    // 同伴後の延長：90分後の時刻の時間帯が基準
+    let douhanExtPrice = priceAt(cursor); // 21:45など
+    extBlocks.forEach(b => {
+      extCost += b.min === 60 ? douhanExtPrice : douhanExtPrice * 0.5;
+      cursor += b.min;
+    });
   } else {
-    // 通常：最初の1時間セット料金
-    setCost = priceAt(cursor);
+    // 通常：入店時間帯の料金がずっと適用
+    const basePrice = priceAt(inPriceMin);
+    setCost = basePrice;
     cursor += 60;
+    extBlocks.forEach(b => {
+      extCost += b.min === 60 ? basePrice : basePrice * 0.5;
+      cursor += b.min;
+    });
   }
 
-  // 延長ブロック：「延長を決めた時刻」の時間帯が次の延長に引き継がれる
-  // 最初の延長は入店時の時間帯、以降は直前の延長開始時刻の時間帯
-  let decisionTimeMin = isDouhan ? (ih*60+im) : (ih*60+im); // 入店時刻
-  extBlocks.forEach(b => {
-    const price = priceAt(decisionTimeMin);
-    extCost += b.min === 60 ? price : price * 0.5;
-    decisionTimeMin = cursor; // 次の延長の基準は今回の延長開始時刻
-    cursor += b.min;
-  });
-
-  // 指名料：滞在時間を1時間単位で切り上げ
-  const shimenHours = Math.ceil(stayMin / 60);
+  // 指名料：30分延長は奇数回目のみ加算（1回目加算、2回目無料、3回目加算...）
+  // 1時間延長は毎回加算
+  const isDouhanForShimen = document.getElementById('togDouhan').checked;
+  let shimenHours;
+  if (isDouhanForShimen) {
+    // 同伴：90分=1時間分固定 + 延長分
+    // 合計延長時間を60分で切り上げ
+    const extTotalMin = extBlocks.reduce((s,b)=>s+b.min, 0);
+    const extShimen = Math.ceil(extTotalMin / 60);
+    shimenHours = 1 + extShimen;
+  } else {
+    // 通常：滞在時間を1時間切り上げ
+    shimenHours = Math.ceil(stayMin / 60);
+  }
   const shimenCost = settings.shimen * shimenHours;
 
   return { setCost, extCost, shimenCost };
@@ -1006,7 +1064,8 @@ function calc() {
   }
 
   // 小計合計（税前）
-  const subtotal = setCost + extCost + shimenCost + naijoCost + douhanCost + vipCost + orderSum;
+  const discount = parseInt(document.getElementById('discount').value) || 0;
+  const subtotal = Math.max(0, setCost + extCost + shimenCost + naijoCost + douhanCost + vipCost + orderSum - discount);
   const total    = applyTax(subtotal);
   const taxPart  = total - subtotal;
   const rounded  = roundPayment(total);
@@ -1016,6 +1075,11 @@ function calc() {
 
   // 表示
   document.getElementById('dispSet').textContent = fmt(setCost + extCost);
+  // 割引表示
+  const dispDiscountRow = document.getElementById('dispDiscountRow');
+  if (dispDiscountRow) dispDiscountRow.style.display = discount > 0 ? 'flex' : 'none';
+  const dispDiscountEl = document.getElementById('dispDiscount');
+  if (dispDiscountEl) dispDiscountEl.textContent = '-'+fmt(discount);
   document.getElementById('dispDouhanRow').style.display = isDouhan ? 'flex' : 'none';
   document.getElementById('dispDouhan').textContent = fmt(douhanCost);
   document.getElementById('dispVipRow').style.display = isVip ? 'flex' : 'none';
@@ -1130,7 +1194,8 @@ function confirmBilling() {
     vipCost = settings.vip * vipHours + settings.vip * 0.5 * vipHalf;
     if (isVipSolo) vipCost *= 2;
   }
-  const subtotal   = setCost+extCost+shimenCost+naijoCost+douhanCost+vipCost+orderSum;
+  const discount   = parseInt(document.getElementById('discount').value)||0;
+  const subtotal   = Math.max(0, setCost+extCost+shimenCost+naijoCost+douhanCost+vipCost+orderSum-discount);
   const total      = applyTax(subtotal);
   const rounded    = roundPayment(total);
   const tanto      = subtotal;
@@ -1146,7 +1211,7 @@ function confirmBilling() {
     id: Date.now(),
     inTime, outTime, stayMin,
     isDouhan, isVip, isNaijo, naijoGroups: JSON.parse(JSON.stringify(naijoGroups)),
-    orders, orderSum, subtotal, total, rounded, tanto, budget, addable, memo,
+    orders, orderSum, discount, subtotal, total, rounded, tanto, budget, addable, memo,
     label: getTimeslotLabel(inTime),
   };
   history.push(entry);
@@ -1180,6 +1245,10 @@ function resetAll() {
   document.getElementById('budgetDisp').value='';
   document.getElementById('memoInput').value='';
   document.getElementById('naijoCountRow').style.display='none';
+  document.getElementById('togDiscount').checked=false;
+  document.getElementById('discountRow').style.display='none';
+  document.getElementById('discountDisp').value='';
+  document.getElementById('discount').value='';
   clearDraft();
   for(let i=1;i<=5;i++){
     document.getElementById('o'+i).value='';
