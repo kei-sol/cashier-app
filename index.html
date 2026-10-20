@@ -972,18 +972,18 @@ function calcTimeBasedFees(stayMin, inTime) {
   // 指名料：30分延長は奇数回目のみ加算（1回目加算、2回目無料、3回目加算...）
   // 1時間延長は毎回加算
   const isDouhanForShimen = document.getElementById('togDouhan').checked;
-  let shimenHours;
+  let shimenCost;
   if (isDouhanForShimen) {
-    // 同伴：90分=1時間分固定 + 延長分
-    // 合計延長時間を60分で切り上げ
+    // 同伴：最初の90分は¥6,000固定（settings.shimen×2）
+    // 延長分は通常レート(settings.shimen)×合計延長時間の切り上げ時間数
     const extTotalMin = extBlocks.reduce((s,b)=>s+b.min, 0);
     const extShimen = Math.ceil(extTotalMin / 60);
-    shimenHours = 1 + extShimen;
+    shimenCost = settings.shimen * 2 + settings.shimen * extShimen;
   } else {
     // 通常：滞在時間を1時間切り上げ
-    shimenHours = Math.ceil(stayMin / 60);
+    const shimenHours = Math.ceil(stayMin / 60);
+    shimenCost = settings.shimen * shimenHours;
   }
-  const shimenCost = settings.shimen * shimenHours;
 
   return { setCost, extCost, shimenCost };
 }
